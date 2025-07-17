@@ -61,38 +61,99 @@ exports.handler = async function (event, context) {
 
     console.log("✅ Webflow verified:", formData);
 
-    // ✅ Map Webflow fields to Airtable fields (ensure they match exactly)
-    const airtableFields = {
-      "Zipcode": formData.zipcode,
-      "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
-      "Which issue do you care about most?": formData["Which issue do you care about most?"],
-      "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
-      "Session ID": formData.sessionid,
-    };
 
-    const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
+    if (formData.recordid) {
+      const recordIdFromForm = formData.recordid;
+      const emailToUpdate = formData["Email Address"];
 
-    const airtableResponse = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${airtableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ fields: airtableFields }),
-    });
+      console.log("📦 Updating record with session ID:", recordIdFromForm);
 
-    const result = await airtableResponse.json();
+      // Step 4: Find the Airtable record with matching session ID
+      const findUrl = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(
+        airtableTable
+      )}?filterByFormula=${encodeURIComponent(`{Session ID} = "${recordIdFromForm}"`)}`;
 
-    if (!airtableResponse.ok) {
-      throw new Error(result?.error?.message || "Unknown Airtable error");
+      const findResponse = await fetch(findUrl, {
+        headers: {
+          Authorization: `Bearer ${airtableApiKey}`,
+        },
+      });
+
+      const findResult = await findResponse.json();
+
+      if (!findResult.records || findResult.records.length === 0) {
+        return {
+          statusCode: 404,
+          body: "No record found with the provided session ID",
+        };
+      }
+
+      const airtableRecordId = findResult.records[0].id;
+
+      // Step 5: Update the record with the email
+      const updateResponse = await fetch(
+        `https://api.airtable.com/v0/${airtableBaseId}/${airtableTable}/${airtableRecordId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${airtableApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fields: {
+              Email: emailToUpdate,
+            },
+          }),
+        }
+      );
+
+      const updateResult = await updateResponse.json();
+
+      if (!updateResponse.ok) {
+        throw new Error(updateResult?.error?.message || "Failed to update Airtable");
+      }
+
+      console.log("✅ Email updated in Airtable:", updateResult);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ message: "Email updated in Airtable", recordId: airtableRecordId }),
+      };
+
+    } else {
+      // ✅ Map Webflow fields to Airtable fields (ensure they match exactly)
+      const airtableFields = {
+        "Zipcode": formData.zipcode,
+        "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
+        "Which issue do you care about most?": formData["Which issue do you care about most?"],
+        "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
+        "Session ID": formData.sessionid,
+      };
+
+      const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
+
+      const airtableResponse = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${airtableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fields: airtableFields }),
+      });
+
+      const result = await airtableResponse.json();
+
+      if (!airtableResponse.ok) {
+        throw new Error(result?.error?.message || "Unknown Airtable error");
+      }
+
+      console.log("✅ Sent to Airtable:", result);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ message: "Webhook verified and data stored in Airtable" }),
+      };
     }
-
-    console.log("✅ Sent to Airtable:", result);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: "Webhook verified and data stored in Airtable" }),
-    };
   } catch (err) {
     console.error("Error handling webhook:", err.message);
     return {
