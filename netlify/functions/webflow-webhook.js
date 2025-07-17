@@ -57,16 +57,7 @@ exports.handler = async function (event, context) {
 
     console.log("📦 Raw Webhook Payload:", body);
 
-    const formData = body?.data;
-
-    if (!formData) {
-      console.error("❌ Missing 'data' object in webhook payload");
-      return {
-        statusCode: 400,
-        body: "Missing form data in webhook payload",
-      };
-    }
-
+    const formData = body?.payload?.data;
 
     console.log("✅ Webflow verified:", formData);
 
