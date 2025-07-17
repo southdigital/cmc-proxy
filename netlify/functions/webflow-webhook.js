@@ -1,7 +1,6 @@
 const crypto = require("crypto");
 
 exports.handler = async function (event, context) {
-  console.log("Webhook received!");
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
@@ -9,44 +8,54 @@ exports.handler = async function (event, context) {
     };
   }
 
-  const secret = process.env.AIRTABLE_WEBFLOW_WEBHOOK_KEY;
   const signatureFromWebflow = event.headers["x-webflow-signature"];
   const rawBody = event.body;
+  const secret = process.env.AIRTABLE_WEBFLOW_WEBHOOK_KEY;
 
   if (!signatureFromWebflow || !rawBody) {
+    console.warn("Missing signature or body");
     return {
       statusCode: 400,
       body: "Missing signature or body",
     };
   }
 
-  // Step 1: Compute expected signature
-  const hmac = crypto.createHmac("sha256", secret);
-  hmac.update(rawBody, "utf8");
-  const expectedSignature = hmac.digest("base64");
+  // ✅ Compute signature as HEX (to match Webflow)
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody, "utf8")
+    .digest("hex");
 
-  const receivedBuffer = Buffer.from(signatureFromWebflow, "base64");
-  const expectedBuffer = Buffer.from(expectedSignature, "base64");
+  // ✅ Compare using timing-safe check
+  const validSignature =
+    expectedSignature.length === signatureFromWebflow.length &&
+    crypto.timingSafeEqual(
+      Buffer.from(expectedSignature, "hex"),
+      Buffer.from(signatureFromWebflow, "hex")
+    );
 
-  // Step 2: Safely compare signatures only if length matches
-  const signaturesMatch =
-    receivedBuffer.length === expectedBuffer.length &&
-    crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-
-  if (!signaturesMatch) {
-    console.log("❌ Webhook signature invalid.");
+  if (!validSignature) {
+    console.warn("❌ Webhook signature invalid.");
+    console.log("Expected:", expectedSignature);
+    console.log("Received:", signatureFromWebflow);
     return {
       statusCode: 401,
       body: "Invalid signature",
     };
   }
 
-  // ✅ Signature is valid
-  const parsed = JSON.parse(rawBody);
-  console.log("✅ Verified Webflow Webhook:", parsed);
+  // ✅ Signature valid – parse body and handle event
+  const payload = JSON.parse(rawBody);
+  const eventType = payload.event;
+  const formData = payload.data;
+
+  console.log("✅ Webhook event:", eventType);
+  console.log("📦 Form data:", formData);
+
+  // You can now send formData to Airtable or process accordingly
 
   return {
     statusCode: 200,
-    body: "Webhook received and verified",
+    body: JSON.stringify({ message: "Webhook received and verified" }),
   };
 };
