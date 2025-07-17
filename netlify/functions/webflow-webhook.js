@@ -67,6 +67,7 @@ exports.handler = async function (event, context) {
       "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
       "Which issue do you care about most?": formData["Which issue do you care about most?"],
       "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
+      "Session ID": formData.sessionid,
     };
 
     const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
