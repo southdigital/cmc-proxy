@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 exports.handler = async function (event, context) {
   if (event.httpMethod !== "POST") {
     return {
@@ -6,31 +8,37 @@ exports.handler = async function (event, context) {
     };
   }
 
-  try {
-    const body = JSON.parse(event.body);
+  const secret = process.env.AIRTABLE_WEBFLOW_WEBHOOK_KEY;
+  const signatureFromWebflow = event.headers["x-webflow-signature"];
+  const rawBody = event.body; // Webflow signs the raw string, not parsed JSON
 
-    console.log("Received Webflow webhook:", body);
+  // Step 1: Compute HMAC SHA256 of raw body using your webhook secret
+  const hmac = crypto.createHmac("sha256", secret);
+  hmac.update(rawBody, "utf8");
+  const expectedSignature = hmac.digest("base64");
 
-    // Map and send to Airtable (same as before)
-    const mappedFields = {
-      "Email": body.data.email,
-      "Zipcode": body.data.zipcode,
-      "City": body.data.city,
-      "Do you believe animals deserve stronger protection laws?": body.data["question1"],
-      "Which issue do you care about most?": body.data["question2"],
-    };
+  // Step 2: Compare with signature from Webflow
+  const signaturesMatch = crypto.timingSafeEqual(
+    Buffer.from(expectedSignature),
+    Buffer.from(signatureFromWebflow || "")
+  );
 
-    // Send to Airtable (code omitted here — same as your existing POST logic)
-
+  if (!signaturesMatch) {
+    console.warn("⚠️ Invalid webhook signature.");
     return {
-      statusCode: 200,
-      body: "Webhook received",
-    };
-  } catch (err) {
-    console.error("Webhook Error:", err.message);
-    return {
-      statusCode: 500,
-      body: "Server Error",
+      statusCode: 401,
+      body: "Invalid signature",
     };
   }
+
+  // ✅ Signature is valid — now parse and handle the webhook
+  const body = JSON.parse(rawBody);
+  console.log("✅ Verified Webflow Webhook:", body);
+
+  // Now send data to Airtable or process it as needed...
+
+  return {
+    statusCode: 200,
+    body: "Webhook received and verified",
+  };
 };
