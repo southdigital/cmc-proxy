@@ -9,19 +9,16 @@ exports.handler = async function (event, context) {
   }
 
   try {
-    // Parse form data sent from Webflow (URL-encoded)
     const rawBody = querystring.parse(event.body);
 
-    // Log incoming Webflow data (view in Netlify dashboard > Functions > airtable-post)
-    console.log("Webflow Form Data:", rawBody);
-
-    // Map Webflow field names to exact Airtable field names
     const mappedFields = {
-      "Email": rawBody.email,
       "Zipcode": rawBody.zipcode,
-      "City": rawBody.city,
-      "Do you believe animals deserve stronger protection laws?": rawBody["question-1"],
-      "Which issue do you care about most?": rawBody["question-2"]
+      "Do you believe animals deserve stronger protection laws?": rawBody["Do-you-believe-animals-deserve-stronger-protection-laws"],
+      "Which issue do you care about most?": rawBody["Which-issue-do-you-care-about-most"],
+      // Optional: include the optional open-text field if you want
+      "Which issue do you care about most? (Please specify)": rawBody["Which-issue-do-you-care-about-most-Please-specify"],
+      // "Email": rawBody.email, // uncomment if you add an email field to your form
+      // "City": rawBody.city,   // uncomment if you add a city field
     };
 
     const airtableApiKey = process.env.AIRTABLE_API_KEY;
