@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 exports.handler = async function (event, context) {
+  console.log("Webhook received!");
   if (event.httpMethod !== "POST") {
     return {
       statusCode: 405,
@@ -10,32 +11,39 @@ exports.handler = async function (event, context) {
 
   const secret = process.env.AIRTABLE_WEBFLOW_WEBHOOK_KEY;
   const signatureFromWebflow = event.headers["x-webflow-signature"];
-  const rawBody = event.body; // Webflow signs the raw string, not parsed JSON
+  const rawBody = event.body;
 
-  // Step 1: Compute HMAC SHA256 of raw body using your webhook secret
+  if (!signatureFromWebflow || !rawBody) {
+    return {
+      statusCode: 400,
+      body: "Missing signature or body",
+    };
+  }
+
+  // Step 1: Compute expected signature
   const hmac = crypto.createHmac("sha256", secret);
   hmac.update(rawBody, "utf8");
   const expectedSignature = hmac.digest("base64");
 
-  // Step 2: Compare with signature from Webflow
-  const signaturesMatch = crypto.timingSafeEqual(
-    Buffer.from(expectedSignature),
-    Buffer.from(signatureFromWebflow || "")
-  );
+  const receivedBuffer = Buffer.from(signatureFromWebflow, "base64");
+  const expectedBuffer = Buffer.from(expectedSignature, "base64");
+
+  // Step 2: Safely compare signatures only if length matches
+  const signaturesMatch =
+    receivedBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 
   if (!signaturesMatch) {
-    console.warn("⚠️ Invalid webhook signature.");
+    console.log("❌ Webhook signature invalid.");
     return {
       statusCode: 401,
       body: "Invalid signature",
     };
   }
 
-  // ✅ Signature is valid — now parse and handle the webhook
-  const body = JSON.parse(rawBody);
-  console.log("✅ Verified Webflow Webhook:", body);
-
-  // Now send data to Airtable or process it as needed...
+  // ✅ Signature is valid
+  const parsed = JSON.parse(rawBody);
+  console.log("✅ Verified Webflow Webhook:", parsed);
 
   return {
     statusCode: 200,
