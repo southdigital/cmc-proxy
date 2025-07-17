@@ -1,0 +1,8 @@
+[build]
+  functions = "netlify/functions"
+  publish = "dist" # You can ignore this if no frontend
+
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
