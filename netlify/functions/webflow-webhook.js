@@ -53,7 +53,20 @@ exports.handler = async function (event, context) {
 
     // ✅ Parse webhook payload
     const body = JSON.parse(rawBody);
-    const formData = body.data;
+
+
+    console.log("📦 Raw Webhook Payload:", body);
+
+    const formData = body?.data;
+
+    if (!formData) {
+      console.error("❌ Missing 'data' object in webhook payload");
+      return {
+        statusCode: 400,
+        body: "Missing form data in webhook payload",
+      };
+    }
+
 
     console.log("✅ Webflow verified:", formData);
 
