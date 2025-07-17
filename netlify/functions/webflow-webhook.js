@@ -1,61 +1,76 @@
 const crypto = require("crypto");
 
 exports.handler = async function (event, context) {
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      body: "Method Not Allowed",
-    };
-  }
 
-  const signatureFromWebflow = event.headers["x-webflow-signature"];
+  console.log("Webhook received");
+
+  const clientSecret = process.env.WEBFLOW_CLIENT_SECRET;
+
+  const signature = event.headers["x-webflow-signature"];
+  const timestamp = event.headers["x-webflow-timestamp"];
   const rawBody = event.body;
-  const secret = process.env.AIRTABLE_WEBFLOW_WEBHOOK_KEY;
 
-  if (!signatureFromWebflow || !rawBody) {
-    console.warn("Missing signature or body");
+  if (!signature || !timestamp || !rawBody) {
     return {
       statusCode: 400,
-      body: "Missing signature or body",
+      body: "Missing signature, timestamp, or body",
     };
   }
 
-  // ✅ Compute signature as HEX (to match Webflow)
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody, "utf8")
-    .digest("hex");
+  try {
+    // Step 1: Recreate the signed data string
+    const signedData = `${timestamp}:${rawBody}`;
 
-  // ✅ Compare using timing-safe check
-  const validSignature =
-    expectedSignature.length === signatureFromWebflow.length &&
-    crypto.timingSafeEqual(
-      Buffer.from(expectedSignature, "hex"),
-      Buffer.from(signatureFromWebflow, "hex")
-    );
+    // Step 2: Create HMAC using client secret
+    const expectedSignature = crypto
+      .createHmac("sha256", clientSecret)
+      .update(signedData)
+      .digest("hex");
 
-  if (!validSignature) {
-    console.warn("❌ Webhook signature invalid.");
-    console.log("Expected:", expectedSignature);
-    console.log("Received:", signatureFromWebflow);
+    // Step 3: Validate signature securely
+    const validSignature =
+      expectedSignature.length === signature.length &&
+      crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, "hex"),
+        Buffer.from(signature, "hex")
+      );
+
+    if (!validSignature) {
+      console.warn("❌ Invalid signature");
+      console.log("Expected:", expectedSignature);
+      console.log("Received:", signature);
+      return {
+        statusCode: 401,
+        body: "Invalid signature",
+      };
+    }
+
+    // Step 4: Validate timestamp (within 5 minutes)
+    const now = Date.now();
+    const requestTime = parseInt(timestamp, 10);
+
+    if (isNaN(requestTime) || now - requestTime > 5 * 60 * 1000) {
+      return {
+        statusCode: 408,
+        body: "Webhook request expired",
+      };
+    }
+
+    // ✅ Signature and timestamp are valid — parse payload
+    const payload = JSON.parse(rawBody);
+    console.log("✅ Webhook verified:", payload);
+
+    // You can now forward to Airtable or handle accordingly
+
     return {
-      statusCode: 401,
-      body: "Invalid signature",
+      statusCode: 200,
+      body: "Webhook received and verified",
+    };
+  } catch (err) {
+    console.error("Webhook processing error:", err.message);
+    return {
+      statusCode: 500,
+      body: "Internal Server Error",
     };
   }
-
-  // ✅ Signature valid – parse body and handle event
-  const payload = JSON.parse(rawBody);
-  const eventType = payload.event;
-  const formData = payload.data;
-
-  console.log("✅ Webhook event:", eventType);
-  console.log("📦 Form data:", formData);
-
-  // You can now send formData to Airtable or process accordingly
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: "Webhook received and verified" }),
-  };
 };
