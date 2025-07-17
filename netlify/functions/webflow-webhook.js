@@ -1,10 +1,10 @@
 const crypto = require("crypto");
 
 exports.handler = async function (event, context) {
-
-  console.log("Webhook received");
-
   const clientSecret = process.env.WEBFLOW_CLIENT_SECRET;
+  const airtableApiKey = process.env.AIRTABLE_API_KEY;
+  const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+  const airtableTable = process.env.AIRTABLE_TABLE;
 
   const signature = event.headers["x-webflow-signature"];
   const timestamp = event.headers["x-webflow-timestamp"];
@@ -18,16 +18,13 @@ exports.handler = async function (event, context) {
   }
 
   try {
-    // Step 1: Recreate the signed data string
+    // ✅ Verify signature
     const signedData = `${timestamp}:${rawBody}`;
-
-    // Step 2: Create HMAC using client secret
     const expectedSignature = crypto
       .createHmac("sha256", clientSecret)
       .update(signedData)
       .digest("hex");
 
-    // Step 3: Validate signature securely
     const validSignature =
       expectedSignature.length === signature.length &&
       crypto.timingSafeEqual(
@@ -37,15 +34,13 @@ exports.handler = async function (event, context) {
 
     if (!validSignature) {
       console.warn("❌ Invalid signature");
-      console.log("Expected:", expectedSignature);
-      console.log("Received:", signature);
       return {
         statusCode: 401,
         body: "Invalid signature",
       };
     }
 
-    // Step 4: Validate timestamp (within 5 minutes)
+    // ✅ Check timestamp freshness (within 5 minutes)
     const now = Date.now();
     const requestTime = parseInt(timestamp, 10);
 
@@ -56,21 +51,48 @@ exports.handler = async function (event, context) {
       };
     }
 
-    // ✅ Signature and timestamp are valid — parse payload
-    const payload = JSON.parse(rawBody);
-    console.log("✅ Webhook verified:", payload);
+    // ✅ Parse webhook payload
+    const body = JSON.parse(rawBody);
+    const formData = body.data;
 
-    // You can now forward to Airtable or handle accordingly
+    console.log("✅ Webflow verified:", formData);
+
+    // ✅ Map Webflow fields to Airtable fields (ensure they match exactly)
+    const airtableFields = {
+      "Zipcode": formData.zipcode,
+      "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
+      "Which issue do you care about most?": formData["Which issue do you care about most?"],
+      "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
+    };
+
+    const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
+
+    const airtableResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${airtableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fields: airtableFields }),
+    });
+
+    const result = await airtableResponse.json();
+
+    if (!airtableResponse.ok) {
+      throw new Error(result?.error?.message || "Unknown Airtable error");
+    }
+
+    console.log("✅ Sent to Airtable:", result);
 
     return {
       statusCode: 200,
-      body: "Webhook received and verified",
+      body: JSON.stringify({ message: "Webhook verified and data stored in Airtable" }),
     };
   } catch (err) {
-    console.error("Webhook processing error:", err.message);
+    console.error("Error handling webhook:", err.message);
     return {
       statusCode: 500,
-      body: "Internal Server Error",
+      body: JSON.stringify({ error: err.message }),
     };
   }
 };
