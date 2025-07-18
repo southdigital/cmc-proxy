@@ -122,12 +122,31 @@ exports.handler = async function (event, context) {
 
     } else {
       // ✅ Map Webflow fields to Airtable fields (ensure they match exactly)
+
+      const zipCode = formData.zipcode;
+      let city = "";
+
+      fetch(`https://api.zippopotam.us/us/${zipCode}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('ZIP code not found');
+          }
+          return response.json();
+        })
+        .then(data => {
+          city = data.places[0]['place name'];
+        })
+        .catch(error => {
+          console.error("Error fetching city:", error.message);
+        });
+
       const airtableFields = {
-        "Zipcode": formData.zipcode,
+        "Zipcode": zipCode,
         "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
         "Which issue do you care about most?": formData["Which issue do you care about most?"],
         "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
         "Session ID": formData.sessionid,
+        "City": city,
       };
 
       const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
