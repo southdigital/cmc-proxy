@@ -131,6 +131,7 @@ exports.handler = async function (event, context) {
         if (response.ok) {
           const data = await response.json();
           city = data.places[0]['place name'];
+          console.log("City found: ", city);
         } else {
           console.warn("ZIP code not found, proceeding without city");
         }
