@@ -1,5 +1,3 @@
-const fetch = require("node-fetch");
-
 exports.handler = async function (event, context) {
   const apiKey = process.env.AIRTABLE_API_KEY;
   const baseId = process.env.AIRTABLE_BASE_ID;
@@ -18,7 +16,7 @@ exports.handler = async function (event, context) {
     const data = await response.json();
     const records = data.records;
 
-    // 2. Count how many times each ZIP appears
+    // 2. Count ZIP code occurrences
     const zipCounts = {};
     records.forEach(record => {
       const zip = record.fields?.Zipcode?.trim();
@@ -27,7 +25,7 @@ exports.handler = async function (event, context) {
       }
     });
 
-    // 3. Fetch coordinates for each ZIP
+    // 3. Lookup lat/lng for each ZIP and repeat it `count` times
     const features = [];
 
     for (const zip in zipCounts) {
@@ -46,7 +44,7 @@ exports.handler = async function (event, context) {
 
           const count = zipCounts[zip];
 
-          // 4. Repeat the point based on how many times the ZIP appears
+          // Push the point multiple times based on count for heatmap intensity
           for (let i = 0; i < count; i++) {
             features.push({
               type: "Feature",
@@ -62,10 +60,10 @@ exports.handler = async function (event, context) {
       }
     }
 
-    // 5. Return GeoJSON
+    // 4. Return GeoJSON
     const geojson = {
       type: "FeatureCollection",
-      features,
+      features
     };
 
     return {
@@ -74,7 +72,7 @@ exports.handler = async function (event, context) {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(geojson),
+      body: JSON.stringify(geojson)
     };
 
   } catch (error) {
@@ -84,7 +82,7 @@ exports.handler = async function (event, context) {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ error: error.message }),
+      body: JSON.stringify({ error: error.message })
     };
   }
 };
