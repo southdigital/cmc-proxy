@@ -14,15 +14,21 @@ exports.handler = async function (event, context) {
 
     const data = await response.json();
 
-    console.log("Data: ", data);
-
     return {
       statusCode: 200,
+      headers: {
+        "Access-Control-Allow-Origin": "*", // ✅ Required for browser JS
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify(data.records),
     };
   } catch (error) {
     return {
       statusCode: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*", // ✅ Also for errors
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({ error: error.message }),
     };
   }
