@@ -126,19 +126,17 @@ exports.handler = async function (event, context) {
       const zipCode = formData.zipcode;
       let city = "";
 
-      fetch(`https://api.zippopotam.us/us/${zipCode}`)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('ZIP code not found');
-          }
-          return response.json();
-        })
-        .then(data => {
+      try {
+        const response = await fetch(`https://api.zippopotam.us/us/${zipCode}`);
+        if (response.ok) {
+          const data = await response.json();
           city = data.places[0]['place name'];
-        })
-        .catch(error => {
-          console.error("Error fetching city:", error.message);
-        });
+        } else {
+          console.warn("ZIP code not found, proceeding without city");
+        }
+      } catch (error) {
+        console.error("Error fetching city:", error.message);
+      }
 
       const airtableFields = {
         "Zipcode": zipCode,
