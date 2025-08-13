@@ -133,6 +133,9 @@ exports.handler = async function (event, context) {
         "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
         "Session ID": formData.sessionid,
         "City": city,
+        "lat": formData.lat,
+        "lng": formData.lng,
+        "place_id": formData.place_id,
       };
 
       const url = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(airtableTable)}`;
