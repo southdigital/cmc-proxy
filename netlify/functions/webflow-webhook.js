@@ -121,16 +121,33 @@ exports.handler = async function (event, context) {
       };
 
     } else {
-      // ✅ Map Webflow fields to Airtable fields (ensure they match exactly)
 
       const zipCode = formData.zipcode;
+
       let city = formData.city;
+      let country = '';
+
+      const parts = city.split(',').map(part => part.trim());
+
+      if (parts.length === 1) {
+        city = parts[0];
+        country = '';
+      } else if (parts.length === 2) {
+        city = parts[0];
+        country = parts[1];
+      } else if (parts.length === 3) {
+        city = parts[0];
+        country = parts[2];
+      }
 
       const airtableFields = {
         "Zipcode": zipCode,
+        "Country": country,
         "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
         "Which issue do you care about most?": formData["Which issue do you care about most?"],
         "Which issue do you care about most? (Please specify)": formData["Which issue do you care about most? Please specify"],
+        "Would you vote for a candidate who supports stronger animal protection laws?": formData["Would you vote for a candidate who supports stronger animal protection laws?"],
+        "When deciding who to vote for, would you consider a candidate’s stance on animal protection issues to be one of your top three priorities?": formData["When deciding who to vote for, would you consider a candidate’s stance on animal protection issues to be one of your top three priorities?"],
         "Session ID": formData.sessionid,
         "City": city,
         "lat": formData.lat,
