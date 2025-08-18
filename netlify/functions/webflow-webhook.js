@@ -11,12 +11,6 @@ exports.handler = async function (event, context) {
   const rawBody = event.body;
 
 
-  const ip =
-    event.headers["x-forwarded-for"]?.split(",")[0] ||
-    event.headers["client-ip"] ||
-    event.headers["x-real-ip"] ||
-    "Uknown";
-
   if (!signature || !timestamp || !rawBody) {
     return {
       statusCode: 400,
@@ -130,6 +124,7 @@ exports.handler = async function (event, context) {
     } else {
 
       const zipCode = formData.zipcode;
+      const ip = formData.ipaddress;
 
       let city = formData.city;
       let country = '';
