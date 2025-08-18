@@ -10,6 +10,13 @@ exports.handler = async function (event, context) {
   const timestamp = event.headers["x-webflow-timestamp"];
   const rawBody = event.body;
 
+
+  const ip =
+    event.headers["x-forwarded-for"]?.split(",")[0] ||
+    event.headers["client-ip"] ||
+    event.headers["x-real-ip"] ||
+    "Uknown";
+
   if (!signature || !timestamp || !rawBody) {
     return {
       statusCode: 400,
@@ -141,6 +148,7 @@ exports.handler = async function (event, context) {
       }
 
       const airtableFields = {
+        "IP": ip,
         "Zipcode": zipCode,
         "Country": country,
         "Do you believe animals deserve stronger protection laws?": formData["Do you believe animals deserve stronger protection laws?"],
