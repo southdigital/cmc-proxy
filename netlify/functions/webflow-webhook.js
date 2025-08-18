@@ -147,6 +147,27 @@ exports.handler = async function (event, context) {
         country = parts[2];
       }
 
+
+      const checkIpUrl = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(
+        airtableTable
+      )}?filterByFormula=${encodeURIComponent(`{IP} = "${ip}"`)}`;
+
+      const ipCheckResponse = await fetch(checkIpUrl, {
+        headers: {
+          Authorization: `Bearer ${airtableApiKey}`,
+        },
+      });
+
+      const ipCheckResult = await ipCheckResponse.json();
+
+      if (ipCheckResult.records && ipCheckResult.records.length > 0) {
+        console.log("⚠️ Record with IP already exists:", ip);
+        return {
+          statusCode: 200,
+          body: JSON.stringify({ message: "Record with this IP already exists, no new record created." }),
+        };
+      }
+
       const airtableFields = {
         "IP": ip,
         "Zipcode": zipCode,
