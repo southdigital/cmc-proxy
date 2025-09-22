@@ -1,56 +1,85 @@
 // netlify/functions/airtable-locations.js
-exports.handler = async function () {
-  // 🌟 Customize these to match your Airtable schema
-  const FIELD_LAT = process.env.AIRTABLE_FIELD_LAT || "lat";
-  const FIELD_LNG = process.env.AIRTABLE_FIELD_LNG || "lng";
-  const FIELD_TITLE = process.env.AIRTABLE_FIELD_TITLE || "City"; // optional, for popup/labels
+exports.handler = async function (event) {
+  // Read + trim envs (catch invisible whitespace issues)
+  const FIELD_LAT   = (process.env.AIRTABLE_FIELD_LAT   || "lat").trim();
+  const FIELD_LNG   = (process.env.AIRTABLE_FIELD_LNG   || "lng").trim();
+  const FIELD_TITLE = (process.env.AIRTABLE_FIELD_TITLE || "City").trim();
 
-  const apiKey = process.env.AIRTABLE_API_KEY;
-  const baseId = process.env.AIRTABLE_BASE_ID;
-  const tableName = process.env.AIRTABLE_TABLE;
+  const apiKey = (process.env.AIRTABLE_API_KEY || "").trim();
+  const baseId = (process.env.AIRTABLE_BASE_ID || "").trim();
+  const table  = (process.env.AIRTABLE_TABLE   || "").trim();
 
-  if (!apiKey || !baseId || !tableName) {
-    return {
-      statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        error:
-          "Missing env vars. Expect AIRTABLE_API_KEY, AIRTABLE_BASE_ID, AIRTABLE_TABLE",
-      }),
-    };
-  }
-
-  const baseUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-    tableName
-  )}`;
-
-  const headers = {
-    Authorization: `Bearer ${apiKey}`,
+  const headersBase = {
+    "Access-Control-Allow-Origin": "*",
+    "Content-Type": "application/json",
   };
 
+  if (!apiKey || !baseId || !table) {
+    return resp(500, {
+      error: "Missing env vars. Expect AIRTABLE_API_KEY, AIRTABLE_BASE_ID, AIRTABLE_TABLE",
+      env_snapshot: {
+        AIRTABLE_API_KEY_present: Boolean(apiKey),
+        AIRTABLE_BASE_ID_len: baseId.length,
+        AIRTABLE_TABLE_len: table.length,
+        AIRTABLE_BASE_ID_raw: JSON.stringify(process.env.AIRTABLE_BASE_ID || ""),
+        AIRTABLE_TABLE_raw: JSON.stringify(process.env.AIRTABLE_TABLE || ""),
+      },
+    });
+  }
+
+  const authHeaders = { Authorization: `Bearer ${apiKey}` };
+
+  // Build base URL and default fields filter (reduces payload and matches your schema)
+  const baseUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(table)}`;
+  const params = new URLSearchParams();
+  [FIELD_LAT, FIELD_LNG, FIELD_TITLE].forEach((f) => params.append("fields[]", f));
+  // Optional: allow pageSize override via query (?pageSize=50) for debugging
+  const qs = new URLSearchParams(event?.rawQuery || "");
+  const pageSize = Math.max(1, Math.min(100, Number(qs.get("pageSize") || 100)));
+  params.set("pageSize", String(pageSize));
+
+  let url = `${baseUrl}?${params.toString()}`;
   const allRecords = [];
-  let url = baseUrl;
   let safetyCounter = 0;
 
   try {
-    // 🔁 Fetch all pages
     while (url && safetyCounter < 100) {
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Airtable error ${res.status}: ${text}`);
+      const res = await fetch(url, { headers: authHeaders });
+      const ctype = res.headers.get("content-type") || "";
+
+      // Capture both JSON and text bodies for better debugging
+      let body;
+      if (ctype.includes("application/json")) {
+        body = await res.json();
+      } else {
+        body = await res.text();
       }
 
-      const json = await res.json();
+      if (!res.ok) {
+        // Bubble up Airtable's exact status + error payload so we can see 403/422/etc.
+        return resp(res.status, {
+          error: "Airtable request failed",
+          details: typeof body === "string" ? body : body?.error || body,
+          debug: {
+            attempted_url: url,
+            baseId,
+            table_raw: JSON.stringify(process.env.AIRTABLE_TABLE || ""),
+            table_encoded: encodeURIComponent(table),
+            field_keys: { FIELD_LAT, FIELD_LNG, FIELD_TITLE },
+          },
+        });
+      }
+
+      // Normal happy path
+      const json = typeof body === "string" ? JSON.parse(body) : body;
       allRecords.push(...(json.records || []));
 
-      // Airtable pagination
+      // Preserve the same base query params when paginating
       if (json.offset) {
-        const sep = url.includes("?") ? "&" : "?";
-        url = `${baseUrl}${sep}offset=${json.offset}`;
+        const next = new URL(baseUrl);
+        next.search = params.toString();
+        next.searchParams.set("offset", json.offset);
+        url = next.toString();
       } else {
         url = null;
       }
@@ -58,53 +87,48 @@ exports.handler = async function () {
       safetyCounter++;
     }
 
-    // ➡️ Convert to GeoJSON features
+    // Convert to GeoJSON
     const features = [];
     for (const rec of allRecords) {
-      const latRaw = rec.fields?.[FIELD_LAT];
-      const lngRaw = rec.fields?.[FIELD_LNG];
-
-      if (latRaw == null || lngRaw == null) continue;
-
-      const lat = Number(latRaw);
-      const lng = Number(lngRaw);
+      const lat = Number(rec.fields?.[FIELD_LAT]);
+      const lng = Number(rec.fields?.[FIELD_LNG]);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
 
-      // Mapbox expects [lng, lat]
       features.push({
         type: "Feature",
-        geometry: { type: "Point", coordinates: [lng, lat] },
+        geometry: { type: "Point", coordinates: [lng, lat] }, // Mapbox expects [lng, lat]
         properties: {
           id: rec.id,
           title: rec.fields?.[FIELD_TITLE] || "",
-          // Include everything if you want
-          // ...rec.fields
         },
       });
     }
 
-    const geojson = { type: "FeatureCollection", features };
-
     return {
       statusCode: 200,
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
-        // Optional: cache at the edge for a bit
+        ...headersBase,
         "Cache-Control": "public, max-age=300, s-maxage=300",
       },
-      body: JSON.stringify(geojson),
+      body: JSON.stringify({ type: "FeatureCollection", features }),
     };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json",
+  } catch (err) {
+    // Catch network/parse errors and include context
+    return resp(500, {
+      error: (err && err.message) || String(err),
+      debug: {
+        baseId,
+        table_raw: JSON.stringify(process.env.AIRTABLE_TABLE || ""),
+        initial_url: `${baseUrl}?${params.toString()}`,
       },
-      body: JSON.stringify({ error: error.message }),
+    });
+  }
+
+  function resp(status, bodyObj) {
+    return {
+      statusCode: status,
+      headers: headersBase,
+      body: JSON.stringify(bodyObj),
     };
   }
 };
-
-
