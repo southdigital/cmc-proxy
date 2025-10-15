@@ -6,9 +6,10 @@ exports.handler = async function (event, context) {
     'http://ethicsmap.org',
     'https://www.ethicsmap.org',
     'http://www.ethicsmap.org',
-    'http://localhost:8888',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000', // add your local dev port
+    'https://ethicsmap.webflow.io/',
+    'http://ethicsmap.webflow.io/',
+    'https://www.ethicsmap.webflow.io/',
+    'http://www.ethicsmap.webflow.io/',
   ]);
 
   // Handle CORS preflight quickly
