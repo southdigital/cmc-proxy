@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+import { countries } from "../../src/countries";
 
 exports.handler = async function (event, context) {
   const clientSecret = process.env.WEBFLOW_CLIENT_SECRET;
@@ -133,14 +134,17 @@ exports.handler = async function (event, context) {
 
       if (parts.length === 1) {
         city = parts[0];
-        country = '';
       } else if (parts.length === 2) {
         city = parts[0];
-        country = parts[1];
       } else if (parts.length === 3) {
         city = parts[0];
-        country = parts[2];
       }
+
+      function getCountryName(code) {
+        return countries[code] || code;
+      }
+
+      country = getCountryName(formData.Country);
 
 
       const checkIpUrl = `https://api.airtable.com/v0/${airtableBaseId}/${encodeURIComponent(
